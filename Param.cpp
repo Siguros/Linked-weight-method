@@ -84,7 +84,7 @@ Param::Param() {
 	clkFreq = 2e9;		// Clock frequency (Hz)
 	NumcellPerSynapse =16;
 	NCellmode = true;
-	PulseOperate = false;
+	PulseOperate = false;	
 	PulseNum =1; //default pulsenum=1;
 	
 

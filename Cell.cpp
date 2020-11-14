@@ -282,8 +282,8 @@ RealDevice::RealDevice(int x, int y,int NumCellperSynapse) {
 	writePulseWidthLTP = 300e-6;	// Write pulse width (s) for LTP or weight increase
 	writePulseWidthLTD = 300e-6;	// Write pulse width (s) for LTD or weight decrease
 	writeEnergy = 0;	// Dynamic variable for calculation of write energy (J)
-	maxNumLevelLTP =8;	// Maximum number of conductance states during LTP or weight increase
-	maxNumLevelLTD =8; // Maximum number of conductance states during LTD or weight decrease
+	maxNumLevelLTP =16;	// Maximum number of conductance states during LTP or weight increase
+	maxNumLevelLTD =16; // Maximum number of conductance states during LTD or weight decrease
 	numPulse = 0;	// Number of write pulses used in the most recent write operation (dynamic variable)
 	cmosAccess = true;	// True: Pseudo-crossbar (1T1R), false: cross-point
     FeFET = false;		// True: FeFET structure (Pseudo-crossbar only, should be cmosAccess=1)
@@ -374,8 +374,125 @@ double RealDevice::Read(double voltage) {	// Return read current (A)
 }
 
 void RealDevice::Write(double deltaWeightNormalized, double weight, double minWeight, double maxWeight,int NumCell) {
+
+	if(NumCellperSynapse >= 3){
 	double conductanceNew = 0;	// =conductance if no update
-	double conductanceNewN= conductanceN[NumCell];
+    int N1 = (NumCell-1)%NumCellperSynapse;
+	int N2 = (NumCell+1)%NumCellperSynapse;
+	double conductanceNewN1= conductanceN[N1];
+	double conductanceNewN2= conductanceN[N2];
+	double conductanceNewN=conductanceN[NumCell];
+	// weight update N1
+	deltaWeightNormalized = deltaWeightNormalized / (maxWeight - minWeight);
+	double d2=NumCellperSynapse * deltaWeightNormalized/2;
+	double d1=NumCellperSynapse * deltaWeightNormalized/4;
+		
+		// N1 cell update
+		if (d1 > 0) {	// LTP
+		d1 = truncate(d1, maxNumLevelLTP);
+		numPulse1 = d1 * maxNumLevelLTP;
+		if (numPulse1 > maxNumLevelLTP) {
+			numPulse1 = maxNumLevelLTP;
+		}
+		if (nonlinearWrite) {
+			paramBLTP = (maxConductance - minConductance) / (1 - exp(-maxNumLevelLTP/paramALTP));
+			xPulse = InvNonlinearWeight(conductanceN[N1], maxNumLevelLTP, paramALTP, paramBLTP, minConductance);
+			conductanceNewN1 = NonlinearWeight(xPulse+numPulse1, maxNumLevelLTP, paramALTP, paramBLTP, minConductance);
+		} else {
+			xPulse = (conductanceN[N1]- minConductance) / (maxConductance - minConductance) * maxNumLevelLTP;
+			conductanceNewN1 = (xPulse+numPulse1) / maxNumLevelLTP * (maxConductance - minConductance) + minConductance;
+		}
+	} else {	// LTD
+		d1 = truncate(d1, maxNumLevelLTD);
+		numPulse1 = d1 * maxNumLevelLTD;
+		if (numPulse1 > maxNumLevelLTD) {
+			numPulse1 = maxNumLevelLTD;
+		}
+		if (nonlinearWrite) {
+			paramBLTD = (maxConductance - minConductance) / (1 - exp(-maxNumLevelLTD/paramALTD));
+			xPulse = InvNonlinearWeight(conductanceN[N1], maxNumLevelLTD, paramALTD, paramBLTD, minConductance);
+			conductanceNewN1= NonlinearWeight(xPulse+numPulse1, maxNumLevelLTD, paramALTD, paramBLTD, minConductance);
+		} else {
+			xPulse = (conductanceN[N1] - minConductance) / (maxConductance - minConductance) * maxNumLevelLTD;
+			conductanceNewN1= (xPulse+numPulse1) / maxNumLevelLTD * (maxConductance - minConductance) + minConductance;
+		}
+	}
+		// N2 Cell update
+		if (d1 > 0) {	// LTP
+		d1 = truncate(d1, maxNumLevelLTP);
+		numPulse2 = d1 * maxNumLevelLTP;
+		if (numPulse2 > maxNumLevelLTP) {
+			numPulse2 = maxNumLevelLTP;
+		}
+		if (nonlinearWrite) {
+			paramBLTP = (maxConductance - minConductance) / (1 - exp(-maxNumLevelLTP/paramALTP));
+			xPulse = InvNonlinearWeight(conductanceN[N2], maxNumLevelLTP, paramALTP, paramBLTP, minConductance);
+			conductanceNewN2 = NonlinearWeight(xPulse+numPulse2, maxNumLevelLTP, paramALTP, paramBLTP, minConductance);
+		} else {
+			xPulse = (conductanceN[N2]- minConductance) / (maxConductance - minConductance) * maxNumLevelLTP;
+			conductanceNewN2 = (xPulse+numPulse2) / maxNumLevelLTP * (maxConductance - minConductance) + minConductance;
+		}
+	} else {	// LTD
+		d1 = truncate(d1, maxNumLevelLTD);
+		numPulse2 = d1 * maxNumLevelLTD;
+		if (numPulse2 > maxNumLevelLTD) {
+			numPulse2 = maxNumLevelLTD;
+		}
+		if (nonlinearWrite) {
+			paramBLTD = (maxConductance - minConductance) / (1 - exp(-maxNumLevelLTD/paramALTD));
+			xPulse = InvNonlinearWeight(conductanceN[N2], maxNumLevelLTD, paramALTD, paramBLTD, minConductance);
+			conductanceNewN2= NonlinearWeight(xPulse+numPulse2, maxNumLevelLTD, paramALTD, paramBLTD, minConductance);
+		} else {
+			xPulse = (conductanceN[N2] - minConductance) / (maxConductance - minConductance) * maxNumLevelLTD;
+			conductanceNewN2= (xPulse+numPulse2) / maxNumLevelLTD * (maxConductance - minConductance) + minConductance;
+		}
+	}
+
+	// NumCell update
+
+		if (d2 > 0) {	// LTP
+		d2 = truncate(d2, maxNumLevelLTP);
+		numPulse3 = d2 * maxNumLevelLTP;
+		if (numPulse3 > maxNumLevelLTP) {
+			numPulse3 = maxNumLevelLTP;
+		}
+		if (nonlinearWrite) {
+			paramBLTP = (maxConductance - minConductance) / (1 - exp(-maxNumLevelLTP/paramALTP));
+			xPulse = InvNonlinearWeight(conductanceN[NumCell], maxNumLevelLTP, paramALTP, paramBLTP, minConductance);
+			conductanceNewN = NonlinearWeight(xPulse+numPulse3, maxNumLevelLTP, paramALTP, paramBLTP, minConductance);
+		} else {
+			xPulse = (conductanceN[NumCell]- minConductance) / (maxConductance - minConductance) * maxNumLevelLTP;
+			conductanceNewN = (xPulse+numPulse3) / maxNumLevelLTP * (maxConductance - minConductance) + minConductance;
+		}
+	} else {	// LTD
+		d2 = truncate(d2, maxNumLevelLTD);
+		numPulse3 = d2 * maxNumLevelLTD;
+		if (numPulse3 > maxNumLevelLTD) {
+			numPulse3 = maxNumLevelLTD;
+		}
+		if (nonlinearWrite) {
+			paramBLTD = (maxConductance - minConductance) / (1 - exp(-maxNumLevelLTD/paramALTD));
+			xPulse = InvNonlinearWeight(conductanceN[NumCell], maxNumLevelLTD, paramALTD, paramBLTD, minConductance);
+			conductanceNewN= NonlinearWeight(xPulse+numPulse3, maxNumLevelLTD, paramALTD, paramBLTD, minConductance);
+		} else {
+			xPulse = (conductanceN[NumCell] - minConductance) / (maxConductance - minConductance) * maxNumLevelLTD;
+			conductanceNewN= (xPulse+numPulse3) / maxNumLevelLTD * (maxConductance - minConductance) + minConductance;
+		}
+	}
+
+	conductancePrev = conductance;
+	conductanceN[NumCell] = conductanceNewN;
+	conductanceN[N1] = conductanceNewN1;
+	conductanceN[N2] = conductanceNewN2;
+	for(int i=0; i<NumCellperSynapse;i++){
+		conductanceNew += conductanceN[i];
+	}
+	conductance = conductanceNew;	
+	}
+	else{
+	double conductanceNew = 0;	// =conductance if no update
+	// notation N-1, N , N+1 
+		double conductanceNewN= conductanceN[NumCell];
 	deltaWeightNormalized = deltaWeightNormalized / (maxWeight - minWeight);
 	deltaWeightNormalized = NumCellperSynapse * deltaWeightNormalized;
 	if (deltaWeightNormalized > 0) {	// LTP
@@ -463,6 +580,8 @@ void RealDevice::Write(double deltaWeightNormalized, double weight, double minWe
 	// conductanceNew = conductanceNew - conductanceN[NumCell] + conductanceNewN;
 	// conductanceN[NumCell] = conductanceNewN;
 	// conductance = conductanceNew;
+	}
+
 }
 
 /* Measured device */
