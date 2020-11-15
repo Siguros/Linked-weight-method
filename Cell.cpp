@@ -384,8 +384,8 @@ void RealDevice::Write(double deltaWeightNormalized, double weight, double minWe
 	double conductanceNewN=conductanceN[NumCell];
 	// weight update N1
 	deltaWeightNormalized = deltaWeightNormalized / (maxWeight - minWeight);
-	double d2=NumCellperSynapse * deltaWeightNormalized/2;
-	double d1=NumCellperSynapse * deltaWeightNormalized/4;
+	double d2=(NumCellperSynapse-2) * deltaWeightNormalized;
+	double d1 = deltaWeightNormalized;
 		
 		// N1 cell update
 		if (d1 > 0) {	// LTP
